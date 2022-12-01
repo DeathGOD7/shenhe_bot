@@ -928,12 +928,11 @@ class GenshinCog(commands.Cog, name="genshin"):
         await GeneralPaginator(i, embeds, self.bot.db).start(followup=True)
 
     @app_commands.command(
-        name="artifacts",
-        description=_("View all of your artifacts and their ratings", hash=382),
+        name="lineup",
+        description=_("View popular Genshin lineups", hash=151),
     )
-    async def slash_artifact(self, i: Interaction):
-        locale = await get_user_locale(i.user.id, self.bot.db) or i.locale
-        await i.response.defer()
+    async def slash_lineup(self, i: Interaction):
+        client = self.bot.genshin_client
 
 
 async def setup(bot: commands.Bot) -> None:

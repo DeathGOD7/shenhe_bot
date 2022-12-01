@@ -580,6 +580,11 @@ class GenshinApp:
             )
             embeds.append(embed)
         return embeds
+    
+    @genshin_error_handler
+    async def get_lineups(self, user_id: int, author_id: int, locale: Locale):
+        shenhe_user = await self.get_user_cookie(user_id, author_id, locale)
+        scenarios = await shenhe_user.client.get_lineups()
 
     async def get_user_uid(self, user_id: int) -> int | None:
         uid = await get_uid(user_id, self.db)

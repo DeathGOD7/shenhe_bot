@@ -1,6 +1,7 @@
 import json
 import re
 from typing import Dict, Optional
+import asset
 
 import discord
 import yaml
@@ -77,6 +78,8 @@ class TextMap:
     def get_character_name(
         self, character_id: str, locale: discord.Locale | str, user_locale: Optional[str] = None
     ) -> Optional[str]:
+        if character_id in [str(i) for i in asset.traveler_ids]:
+            character_id = f"{character_id}-anemo"
         avatar_text = self.avatar.get(str(character_id))
         if avatar_text is None:
             return None

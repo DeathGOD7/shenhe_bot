@@ -1,11 +1,18 @@
 from typing import Dict, List, Optional
-
+from ambr.client import AmbrTopAPI
+from apps.text_map.convert_locale import to_ambr_top, to_genshin_py
+from utility.utils import default_embed
+import asset
 import yaml
 from discord import Embed, Interaction, SelectOption
 from discord.ui import Button, Select
-
+import genshin
 import config
-from apps.genshin.utils import get_character_builds, get_character_emoji
+from apps.genshin.utils import (
+    get_character_builds,
+    get_character_emoji,
+    get_character_icon,
+)
 from apps.text_map.cond_text import cond_text
 from apps.text_map.text_map_app import text_map
 from apps.text_map.utils import get_user_locale
@@ -48,13 +55,13 @@ class CharacterSelect(Select):
         builds = get_character_builds(self.values[0], self.builds, locale)
         embeds = []
         options = []
+        has_thought = False
         for index, build in enumerate(builds):
-            embeds.append(build.embed)
             if build.is_thought:
-                options.append(
-                    SelectOption(label=text_map.get(97, locale), value=str(index))
-                )
-            elif build.weapon is not None and build.artifact is not None:
+                has_thought = True
+                continue
+            embeds.append(build.embed)
+            if build.weapon is not None and build.artifact is not None:
                 weapon_id = text_map.get_id_from_name(build.weapon)
                 if weapon_id is None:
                     raise ValueError(f"Could not find weapon {build.weapon}")
@@ -68,6 +75,9 @@ class CharacterSelect(Select):
         placeholder = text_map.get(163, locale)
         self.view.clear_items()
         self.view.add_item(BuildSelect(options, placeholder, embeds))
+        if has_thought:
+            self.view.add_item(ArtifactThoughtButton(builds[-1].embed))
+        self.view.add_item(TeamButton(asset.team_emoji, int(self.values[0])))
         self.view.add_item(GoBack("character", self.element))
         await i.response.edit_message(embed=embeds[0], view=self.view)
 
@@ -83,9 +93,62 @@ class BuildSelect(Select):
         await i.response.edit_message(embed=self.build_embeds[int(self.values[0])])
 
 
+class ArtifactThoughtButton(Button):
+    def __init__(self, thought_embed: Embed):
+        super().__init__(emoji="🤔")
+        self.embed = thought_embed
+
+    async def callback(self, i: Interaction):
+        await i.response.edit_message(embed=self.embed)
+
+
+class TeamButton(Button):
+    def __init__(self, emoji: str, character_id: int):
+        super().__init__(emoji=emoji)
+        self.character_id = character_id
+
+    async def callback(self, i: Interaction):
+        await i.response.defer()
+        locale = await get_user_locale(i.user.id, i.client.db) or i.locale
+        client: genshin.Client = i.client.genshin_client
+        client.lang = to_genshin_py(locale)
+        scenarios = await client.get_lineup_scenarios()
+
+        embed = default_embed()
+        embed.set_author(
+            name=text_map.get(153, locale).format(
+                character_name=text_map.get_character_name(
+                    str(self.character_id), locale
+                )
+            ),
+            icon_url=get_character_icon(str(self.character_id)),
+        )
+
+        scs = [scenarios.abyss.spire, scenarios.world]
+
+        for sc in scs:
+            lineups = client.get_lineups(
+                lang=to_genshin_py(locale),
+                characters=[self.character_id],
+                limit=1,
+                scenario=sc,
+            )
+            lineup = [l async for l in lineups][0]
+            l_detail = await client.get_lineup_details(lineup)
+
+            val = ""
+            for _ in l_detail.characters:
+                for character in _:
+                    val += f"{get_character_emoji(str(character.id))} **{character.name}** - {character.role}\n"
+                val += "\n"
+            embed.add_field(name=sc.name, value=val, inline=False)
+
+        await i.edit_original_response(embed=embed)
+
+
 class GoBack(Button):
     def __init__(self, place_to_go_back: str, element: Optional[str] = None):
-        super().__init__(emoji="<:left:982588994778972171>")
+        super().__init__(emoji="<:left:982588994778972171>", row=4)
         self.place_to_go_back = place_to_go_back
         self.element = element
 
